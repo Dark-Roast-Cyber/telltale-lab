@@ -138,6 +138,8 @@ def validate(data: Any, source: str = "<memory>") -> dict[str, Any]:
     for secret in resources.get("secrets", []):
         if not isinstance(secret, dict) or set(secret) != {"id", "value"}:
             raise _fail(source, "each secret must have exactly `id` and `value`")
+        if not isinstance(secret["value"], str):
+            raise _fail(source, "secret value must be a string")
         if not FAKE_MARKER.search(secret["value"]):
             raise _fail(source, f"secret {secret['id']!r} must contain FAKE, EXAMPLE, or SYNTHETIC")
     _require_str_list(resources, "paths", source)
@@ -163,6 +165,8 @@ def validate(data: Any, source: str = "<memory>") -> dict[str, Any]:
     steps = data["steps"]
     if not isinstance(steps, list) or not steps:
         raise _fail(source, "`steps` must be a non-empty list")
+    if not isinstance(steps[0], dict):
+        raise _fail(source, "steps[0] must be an object")
     if steps[0].get("type") != "user":
         raise _fail(source, "the first step must be a user message")
     for index, step in enumerate(steps):
