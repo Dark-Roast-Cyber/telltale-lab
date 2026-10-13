@@ -8,6 +8,11 @@ adapter reads. OpenCode v2.0.0+ bootstraps fresh databases with
 zero records; see docs/harnesses/compatibility-findings.md. See docs/harnesses/opencode.md for the pinned
 upstream schema this follows and what is intentionally omitted.
 
+The `upstream` profile writes the v2.0.27 shape instead: `session_v2` and
+`session_message` rows, with tool calls as `content[]` entries of assistant
+messages. Telltale 2e8c56a acquires it as zero records (finding F9). Only the
+columns and tables needed for session history are created.
+
 SQLite files are not byte-reproducible across SQLite builds, so determinism
 is defined over `logical_dump()`, not the file hash.
 """
@@ -22,7 +27,8 @@ from ..scenario import Scenario
 from ..util import epoch_ms, offset, parse_utc, stable_id
 
 SOURCE_ID = "opencode.sqlite"
-GENERATOR_VERSION = "opencode-sqlite-v1-schema/1"
+GENERATOR_VERSIONS = {"compatible": "opencode-sqlite-v1-schema/1", "upstream": "opencode-sqlite-v2.0.27/1"}
+UPSTREAM_VERSION = "2.0.27"
 DENIED_ERROR = (
     "The user rejected permission to use this specific tool call. "
     "You may try again with different parameters."
@@ -52,7 +58,26 @@ CREATE INDEX part_message_idx ON part (message_id);
 CREATE INDEX part_session_idx ON part (session_id);
 """
 
+UPSTREAM_SCHEMA = """
+CREATE TABLE project (
+  id text PRIMARY KEY, worktree text NOT NULL, vcs text, name text,
+  time_created integer NOT NULL, time_updated integer NOT NULL
+);
+CREATE TABLE session_v2 (
+  id text PRIMARY KEY, project_id text NOT NULL, workspace_id text, parent_id text,
+  slug text NOT NULL, directory text NOT NULL, path text, title text, version text NOT NULL,
+  agent text, model text, time_created integer NOT NULL, time_updated integer NOT NULL
+);
+CREATE TABLE session_message (
+  id text PRIMARY KEY, session_id text NOT NULL REFERENCES session_v2(id) ON DELETE CASCADE,
+  type text NOT NULL, seq integer NOT NULL,
+  time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
+);
+CREATE UNIQUE INDEX session_message_session_seq_idx ON session_message (session_id, seq);
+"""
+
 TABLES = ("project", "session", "message", "part")
+UPSTREAM_TABLES = ("project", "session_v2", "session_message")
 
 
 def _dump(value: dict) -> str:
@@ -87,7 +112,112 @@ def _tool_part(item: dict, call_id: str, start_ms: int, end_ms: int) -> dict:
     return {"type": "tool", "callID": call_id, "tool": name, "state": state}
 
 
-def write(scenario: Scenario, root: Path) -> list[Path]:
+def _tool_inputs(item: dict) -> tuple[str, dict]:
+    tool = item["tool"]
+    if tool == "shell":
+        return "bash", {"command": item["command"], "description": "Run shell command"}
+    if tool == "read_file":
+        return "read", {"filePath": item["path"]}
+    return "write", {"filePath": item["path"], "content": item.get("content", "")}
+
+
+def _tool_content(item: dict, call_id: str, start_ms: int, end_ms: int) -> dict:
+    """A v2 assistant `content[]` tool entry. v2 has no `pending` state, so a
+    call with no recorded outcome is left `running`."""
+    name, inputs = _tool_inputs(item)
+    result = item["result"]
+    if result is None:
+        return {"type": "tool", "id": call_id, "name": name,
+                "state": {"status": "running", "input": inputs, "metadata": {}}, "time": {"created": start_ms}}
+    if result["status"] == "ok":
+        metadata = {"exit": result.get("exit_code", 0)} if item["tool"] == "shell" else {}
+        state = {"status": "completed", "input": inputs, "metadata": metadata,
+                 "content": [{"type": "text", "text": result.get("output", "")}]}
+        return {"type": "tool", "id": call_id, "name": name, "executed": True, "state": state,
+                "time": {"created": start_ms, "ran": start_ms, "completed": end_ms}}
+    error = result.get("output") or (DENIED_ERROR if result["status"] == "denied" else "error")
+    return {"type": "tool", "id": call_id, "name": name, "executed": result["status"] != "denied",
+            "state": {"status": "error", "input": inputs, "error": error},
+            "time": {"created": start_ms, "completed": end_ms}}
+
+
+def _write_upstream(scenario: Scenario, root: Path, target: Path) -> list[Path]:
+    session_cfg = scenario.session
+    start = parse_utc(session_cfg["start"])
+    step = float(session_cfg.get("step_seconds", 2))
+    cwd = session_cfg["cwd"]
+    model = session_cfg.get("model", "synthetic-model")
+    provider = session_cfg.get("provider", "synthetic-provider")
+
+    def ident(prefix: str, *parts: str, ordinal: int = 0) -> str:
+        return f"{prefix}_{ordinal:06d}{stable_id(scenario.id, 'v2', prefix, *parts, length=20)}"
+
+    project_id = ident("prj", "project")
+    session_id = ident("ses", "session")
+    t0 = epoch_ms(start)
+    rows: list[tuple] = []  # (id, session_id, type, seq, created, updated, data)
+    clock = 0.0
+    assistant: dict | None = None
+
+    def close_assistant() -> None:
+        nonlocal assistant
+        if assistant is not None:
+            data = assistant["data"]
+            data["time"]["completed"] = assistant["updated"]
+            rows.append((assistant["id"], session_id, "assistant", len(rows) + 1,
+                         data["time"]["created"], assistant["updated"], _dump(data)))
+            assistant = None
+
+    for index, item in enumerate(scenario.steps):
+        clock += step
+        now = epoch_ms(offset(start, clock))
+        if item["type"] == "user":
+            close_assistant()
+            data = {"time": {"created": now}, "text": item["text"], "files": [], "agents": [], "skills": []}
+            rows.append((ident("msg", "user", str(index), ordinal=index + 1), session_id, "user",
+                         len(rows) + 1, now, now, _dump(data)))
+            continue
+        if assistant is None:
+            assistant = {"id": ident("msg", "assistant", str(index), ordinal=index + 1), "updated": now,
+                         "data": {"time": {"created": now}, "agent": "build",
+                                  "model": {"id": model, "providerID": provider}, "content": []}}
+        if item["type"] == "assistant":
+            assistant["data"]["content"].append({"type": "text", "text": item["text"]})
+            assistant["updated"] = max(assistant["updated"], now)
+        else:
+            end = epoch_ms(offset(start, clock + step / 2))
+            call_id = "call_" + stable_id(scenario.id, "opencode-call", str(index), length=24)
+            assistant["data"]["content"].append(_tool_content(item, call_id, now, end))
+            assistant["updated"] = max(assistant["updated"], end if item["result"] is not None else now)
+            clock += step / 2
+    close_assistant()
+
+    last = max(row[5] for row in rows)
+    conn = sqlite3.connect(target)
+    try:
+        conn.execute("PRAGMA journal_mode=DELETE")
+        conn.executescript(UPSTREAM_SCHEMA)
+        conn.execute("INSERT INTO project VALUES (?,?,?,?,?,?)", (project_id, cwd, "git", None, t0, last))
+        conn.execute(
+            "INSERT INTO session_v2 (id, project_id, slug, directory, title, version, agent, model, "
+            "time_created, time_updated) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (session_id, project_id, stable_id(scenario.id, "slug", length=8), cwd, scenario.data["title"],
+             UPSTREAM_VERSION, "build", model, t0, last),
+        )
+        conn.executemany("INSERT INTO session_message VALUES (?,?,?,?,?,?,?)", rows)
+        conn.commit()
+    finally:
+        conn.close()
+    return [target]
+
+
+def write(scenario: Scenario, root: Path, profile: str = "compatible") -> list[Path]:
+    if profile == "upstream":
+        target = root / "opencode" / "opencode.db"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            target.unlink()
+        return _write_upstream(scenario, root, target)
     session_cfg = scenario.session
     start = parse_utc(session_cfg["start"])
     step = float(session_cfg.get("step_seconds", 2))
@@ -184,7 +314,8 @@ def logical_dump(db_path: Path) -> list:
     conn = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro&immutable=1", uri=True)
     try:
         dump: list = []
-        for table in TABLES:
+        names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        for table in TABLES if "message" in names else UPSTREAM_TABLES:
             rows = conn.execute(f"SELECT * FROM {table} ORDER BY id").fetchall()  # noqa: S608 - fixed names
             dump.append([table, [list(row) for row in rows]])
         return dump

@@ -95,17 +95,18 @@ def cmd_scenarios(args: argparse.Namespace) -> int:
     return 0
 
 
-def _generate(sc: scenario.Scenario, source_id: str, out: Path) -> dict:
+def _generate(sc: scenario.Scenario, source_id: str, out: Path, profile: str = "compatible") -> dict:
     if out.exists() and any(out.iterdir()):
         raise LabError(f"output directory is not empty: {out}")
-    files = native.generate(sc, source_id, out)
+    files = native.generate(sc, source_id, out, profile)
     record = {
         "format": "telltale-lab/generation/v1",
         "data_origin": "synthetic",
         "scenario_id": sc.id,
         "scenario_sha256": sc.sha256,
         "source_id": source_id,
-        "generator": native.generator_version(source_id),
+        "profile": profile,
+        "generator": native.generator_version(source_id, profile),
         "files": [f.relative_to(out).as_posix() for f in files],
     }
     write_json(out / "generation.json", record)
@@ -125,7 +126,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     formats = sc.formats if args.format == "all" else [args.format]
     for source_id in formats:
         out = _default_out(args, sc, source_id) if len(formats) == 1 else _default_out(args, sc, source_id) / source_id
-        record = _generate(sc, source_id, out)
+        record = _generate(sc, source_id, out, args.profile)
         print(f"generated {sc.id} as {source_id}: {len(record['files'])} file(s) -> {out}")
     return 0
 
@@ -153,7 +154,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         source_id = args.format or sc.formats[0]
         temp = tempfile.TemporaryDirectory(prefix="tlab-")
         root = Path(temp.name) / "root"
-        generation = _generate(sc, source_id, root)
+        generation = _generate(sc, source_id, root, args.profile)
         origin = "synthetic"
     try:
         out = Path(args.out) if args.out else Path(tempfile.mkdtemp(prefix="tlab-analysis-"))
@@ -260,6 +261,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("scenario")
     p.add_argument("--format", default="all", help="source id (codex.sessions, opencode.sqlite) or all")
     p.add_argument("--out", help="output directory (default: vault synthetic/)")
+    p.add_argument("--profile", default="compatible", choices=native.PROFILES,
+                   help="compatible: shapes Telltale acquires; upstream: shapes current harness releases write")
     p.set_defaults(func=cmd_generate)
 
     p = sub.add_parser("analyze", help="run Telltale over a fixture-layout root and compare with labels")
@@ -267,6 +270,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scenario", help="scenario id or path supplying independent labels")
     p.add_argument("--format", help="with --scenario and no --root: generate this source id first")
     p.add_argument("--source-id", help="source id of --root when generation.json is absent")
+    p.add_argument("--profile", default="compatible", choices=native.PROFILES,
+                   help="compatible: shapes Telltale acquires; upstream: shapes current harness releases write")
     p.add_argument("--origin", default="synthetic", choices=sorted(analysis.DATA_ORIGINS))
     p.add_argument("--rules", action="append", help="additional rule YAML (additive --rules)")
     p.add_argument("--config-dir", action="append", help="explicit Telltale config root (rules.d etc.)")
