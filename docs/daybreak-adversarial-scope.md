@@ -50,8 +50,10 @@ these limits:
 
 Known lab observations:
 
-- Codex shell calls are recorded as `bash -lc <command>`, so the bundled
-  `execution.shell` rule fires on every Codex shell call.
+- The default (`compatible`) Codex generator records shell calls with the
+  older `shell` tool as `bash -lc <command>`, so the bundled `execution.shell`
+  rule fires on every one. Current Codex uses `exec_command` with a plain
+  `cmd` string, where that rule does not fire.
 - The OpenCode generator writes the v1 `message`/`part` schema, which is the one
   Telltale reads.
 
