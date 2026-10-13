@@ -1,0 +1,7 @@
+# Python
+__pycache__/
+*.pyc
+
+# Local agent-tool state (never lab content)
+.claude/
+.mcp.json
