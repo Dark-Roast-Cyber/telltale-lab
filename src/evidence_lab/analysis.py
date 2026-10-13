@@ -134,6 +134,10 @@ def evaluate(scenario: Scenario | None, scan_summary: dict, seen: dict) -> dict:
         status, reason = "false_positive", None
     elif missing:
         status, reason = "missed", None
+    elif review == "not_evaluable" and not expectations["must_match"]:
+        # The label says the source cannot show whether the behavior happened
+        # (for example, narration only), so silence is not a clean result.
+        status, reason = "not_evaluable", "labeled_not_evaluable"
     elif expectations["must_match"]:
         status, reason = "detected", None
     else:
