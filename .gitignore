@@ -1,7 +1,13 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
 
 # Local agent-tool state (never lab content)
 .claude/
 .mcp.json
+
+# Private local outputs and settings
+.env
+.env.*
+reports/
