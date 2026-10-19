@@ -1,9 +1,13 @@
 # Telltale evidence lab
 
 The lab validates human-authored scenario v1 JSON, generates synthetic Codex and
-OpenCode session stores, and compares Telltale's observed findings with labels
-written before analysis. Scenario tool commands are data. `generate` and
+OpenCode session stores, and compares [Telltale](https://github.com/Dark-Roast-Cyber/telltale)'s observed findings with labels
+written before analysis. Start with Telltale's [documentation map](https://github.com/Dark-Roast-Cyber/telltale/blob/main/docs/README.md) and [source validation matrix](https://github.com/Dark-Roast-Cyber/telltale/blob/main/docs/source-validation-matrix.md). Scenario tool commands are data. `generate` and
 `analyze` never execute them.
+
+[Agent Archaeology](https://agentarchaeology.ai/) explains the evidence model.
+[Candidate detections](https://github.com/Dark-Roast-Cyber/telltale-detections)
+use this lab; successful execution is not proof of detection quality.
 
 For the scoped Daybreak work, read `docs/daybreak-adversarial-scope.md` and use
 only `scenarios`, `generate`, and `analyze`. Do not use the separate `capture`
