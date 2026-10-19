@@ -1,40 +1,46 @@
 # Telltale evidence lab
 
 The lab validates human-authored scenario v1 JSON, generates synthetic Codex and
-OpenCode session stores, and compares [Telltale](https://github.com/Dark-Roast-Cyber/telltale)'s observed findings with labels
-written before analysis. Start with Telltale's [documentation map](https://github.com/Dark-Roast-Cyber/telltale/blob/main/docs/README.md) and [source validation matrix](https://github.com/Dark-Roast-Cyber/telltale/blob/main/docs/source-validation-matrix.md). Scenario tool commands are data. `generate` and
-`analyze` never execute them.
+OpenCode session stores, and compares findings from
+[Telltale](https://github.com/Dark-Roast-Cyber/telltale) with labels written before
+analysis. Scenario tool commands are data. `generate` and `analyze` never execute them.
 
-[Agent Archaeology](https://agentarchaeology.ai/) explains the evidence model.
-[Candidate detections](https://github.com/Dark-Roast-Cyber/telltale-detections)
-use this lab; successful execution is not proof of detection quality.
+## Browse
 
-For the scoped Daybreak work, read `docs/daybreak-adversarial-scope.md` and use
-only `scenarios`, `generate`, and `analyze`. Do not use the separate `capture`
-command for these scenarios. The scenario validator requires fabricated secret
-markers and reserved URL hosts.
+- [CLI](src/evidence_lab/cli.py), [generators](src/evidence_lab/native/), and [assessment](src/evidence_lab/analysis.py)
+- [Synthetic scenarios](scenarios/) and [tests](tests/)
 
-On Linux, with Python 3 and a Telltale binary from revision `2e8c56a`:
+## Run
+
+Use Python 3 and a Telltale binary matching the tested baseline in
+[the CLI adapter](src/evidence_lab/telltale.py):
 
 ```sh
 PYTHONPATH=src python3 -m evidence_lab scenarios
-PYTHONDONTWRITEBYTECODE=1 TELLTALE_BIN=/tmp/telltale-daybreak-target/release/telltale \
+PYTHONDONTWRITEBYTECODE=1 TELLTALE_BIN=/path/to/telltale \
   python3 -m unittest discover -s tests -v
 ```
 
-The tests cover validator failures, both source-native generators, and analysis
-of the baseline scenario through both source adapters. Put output and the Cargo
-target directory under `/tmp`, outside either repository. The companion
-`telltale-detections/scripts/linux-check.sh` runs the full local Linux gate.
+Put generated stores, reports, and build output outside the repositories. The
+companion [detections gate](https://github.com/Dark-Roast-Cyber/telltale-detections/blob/main/scripts/linux-check.sh)
+owns its revision requirements and runs the combined local Linux assessment.
 
 `generate` and `analyze` take `--profile`. The default, `compatible`, writes
 record shapes Telltale is known to acquire, so detections can be tested.
-`upstream` writes pinned harness tags (Codex rust-v0.162.1,
-OpenCode v2.0.27; see `docs/harnesses/`), not "current releases." Against Telltale `2e8c56a` it gives
-`not_evaluable`: Codex rollouts fail on `token_usage_record` (finding F1) and
-OpenCode v2 databases yield zero records (F9). Use it to check whether a
-Telltale build can read what harnesses write today.
+`upstream` writes pinned harness shapes, not an assertion of current-release
+support. See the [generators](src/evidence_lab/native/) for versions and the
+[compatibility findings](docs/harnesses/compatibility-findings.md) for historical
+acquisition gaps at their recorded revisions.
 
 Scenario labels are independent evidence. A `missed`, `false_positive`, or
 `not_evaluable` result is retained for review; changing a label to make a test
-green would erase the finding.
+green would erase the finding. A successful run is not proof of detection quality.
+
+For [Daybreak](docs/daybreak-adversarial-scope.md), use only `scenarios`, `generate`,
+and `analyze`, not `capture`. The validator requires fabricated secret markers
+and reserved URL hosts.
+
+## Related
+
+- [Candidate detections](https://github.com/Dark-Roast-Cyber/telltale-detections): provisional rule packs assessed with this lab
+- [Agent Archaeology](https://agentarchaeology.ai/): evidence and investigation context
