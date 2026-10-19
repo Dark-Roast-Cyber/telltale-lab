@@ -33,14 +33,14 @@ with `<CMD>` and `<OUT>` filled per issue:
 
 ## 1. Codex: one `token_usage_record` line rejects the whole rollout
 
-**Observed.** Common rollout with `<CMD>`=`ls`: `parse_success 1`, 7 records.
+**Observed.** Common rollout with `<CMD>`=`ls`: `source_processing.parse_success_source_count` 1, 7 records.
 Insert this line before the assistant message:
 
 ```json
 {"timestamp":"2026-10-13T00:00:04Z","type":"token_usage_record","payload":{"thread_id":"00000000-0000-4000-8000-000000000001","turn_id":"turn-1","session_id":"00000000-0000-4000-8000-000000000001","root_turn_id":"turn-1","response_id":"resp_1","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2},"turn_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2},"thread_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,"total_tokens":2}}}
 ```
 
-Result: `parse_error 1`, `unknown_discriminator`, 0 records; warnings
+Result: `source_processing.parse_error_source_count` 1, `unknown_discriminator`, 0 records; warnings
 `source_parse_error_observed`, `selected_sources_produced_no_records`,
 `all_selected_sources_parse_failed_or_empty`. The scan exits 0.
 
@@ -76,7 +76,7 @@ INSERT INTO session_message VALUES ('msg_1','ses_1','user',1,1791849600000,17918
 INSERT INTO session_message VALUES ('msg_2','ses_1','assistant',2,1791849600001,1791849600003,'{"time":{"created":1791849600001,"completed":1791849600003},"agent":"build","model":{"id":"synthetic","providerID":"synthetic"},"content":[{"type":"tool","id":"call_1","name":"bash","state":{"status":"completed","input":{"command":"ls"},"content":[{"type":"text","text":"README.md"}]},"time":{"created":1791849600001,"ran":1791849600002,"completed":1791849600003}}]}');
 ```
 
-Result: `parse_success 1`, 0 records, no failures; only the diagnostic
+Result: `source_processing.parse_success_source_count` 1, 0 records, no failures; the diagnostic
 warnings `source_coverage_partial` and `selected_sources_produced_no_records`.
 No scanner error.
 

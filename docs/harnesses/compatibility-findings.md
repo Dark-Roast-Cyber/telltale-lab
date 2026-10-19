@@ -50,7 +50,7 @@ Links: `TT` = `https://github.com/Dark-Roast-Cyber/telltale/blob/2e8c56aa4558352
   `message`, `function_call` `exec_command`, `function_call_output`,
   assistant `message`, `task_complete`), which parses with 7 records. Insert
   one `{"type":"token_usage_record","payload":{"thread_id":…,"turn_id":…,"session_id":…,"root_turn_id":…,"response_id":…,"usage":{…},"turn_token_usage":{…},"thread_token_usage":{…}}}`
-  line. The result is `parse_err 1`, `unknown_discriminator`, 0 records.
+  line. The result is `source_processing.parse_error_source_count` 1, `unknown_discriminator`, 0 records.
 - Impact: if real rollouts contain this line (the code says every turn with
   usage writes one), Codex acquisition would fail for every current session.
   **OPEN**: confirm with one sandboxed real rollout. Telltale reports bounded
@@ -163,7 +163,7 @@ scan `--root $HOME`.
 
 ## OpenCode (upstream v2 `v2.0.0` `63f7ceec` through `v2.0.27` `1f4d07a4`)
 
-**F9. Fresh v2 databases produce no records; only a diagnostic warning signals it. Confirmed.**
+**F9. Fresh v2 databases produce no records; diagnostic warnings `selected_sources_produced_no_records` and `source_coverage_partial` signal it. Confirmed.**
 
 - Upstream: the v2 bootstrap schema has `session_v2`, `session_message`,
   `session_pending`, `session_inbox`, and `event`, and no `message`/`part`
@@ -176,11 +176,11 @@ scan `--root $HOME`.
 - Repro: create `opencode/opencode.db` with `project`, `session_v2`, and
   `session_message` holding a user row and an assistant row whose `data`
   contains `content:[{type:"tool",state:{status:"completed",…}}]`. Result:
-  `parse_ok 1, records 0, failures []`. The scan summary does carry the
+  `source_processing.parse_success_source_count` 1, records 0, failures []. The scan summary does carry the
   diagnostic warnings `selected_sources_produced_no_records`
   (`suspicious_zero`) and `source_coverage_partial`, so the loss is visible to
   an operator who reads diagnostics, but no scanner error is raised.
-  Reconfirmed against HEAD `2e8c56a` with `tlab analyze`, which now reports
+  Reconfirmed against pinned revision `2e8c56a`. Lab `analyze` reports
   this case as `not_evaluable` (`no_records_acquired`).
 - **OPEN**: whether upgraded databases keep stale v1 tables. Telltale's
   Desktop v2.0.24 validation read `part` rows.

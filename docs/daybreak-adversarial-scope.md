@@ -53,9 +53,12 @@ Known lab observations:
 - The default (`compatible`) Codex generator records shell calls with the
   older `shell` tool as `bash -lc <command>`, so the bundled `execution.shell`
   rule fires on every one. Current Codex uses `exec_command` with a plain
-  `cmd` string, where that rule does not fire.
-- The OpenCode generator writes the v1 `message`/`part` schema, which is the one
-  Telltale reads.
+  `cmd` string. The `bash -lc` wrapper does not itself fire the rule; command
+  text still can.
+- The OpenCode generator's default `compatible` profile writes the v1
+  `message`/`part` schema. `--profile upstream` writes v2 and is
+  `not_evaluable` (`no_records_acquired`) at Telltale `2e8c56a`. The Linux
+  gate assesses OpenCode as `upstream` and Codex as `compatible`.
 
 ## Part A: adversarial lab scenarios
 
@@ -130,6 +133,8 @@ PYTHONPATH=src python3 -m evidence_lab --scenario-dir ~/github/telltale-detectio
   --rules ~/github/telltale-detections/packs/experimental/<name>.yaml --out $TMPDIR/a/<id>-codex
 # repeat with --format opencode.sqlite
 ```
+
+These `analyze` commands omit `--profile`, so they use `compatible`. That is not the Linux gate's OpenCode path, which is `upstream` / `not_evaluable` / `no_records_acquired`.
 
 Report every status honestly: `missed`, `false_positive`, and `not_evaluable`
 are valid findings. Do not change a label or loosen a regex only to improve a

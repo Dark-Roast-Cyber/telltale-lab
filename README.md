@@ -25,8 +25,8 @@ target directory under `/tmp`, outside either repository. The companion
 
 `generate` and `analyze` take `--profile`. The default, `compatible`, writes
 record shapes Telltale is known to acquire, so detections can be tested.
-`upstream` writes what current releases persist (Codex rust-v0.162.1,
-OpenCode v2.0.27; see `docs/harnesses/`). Against Telltale `2e8c56a` it gives
+`upstream` writes pinned harness tags (Codex rust-v0.162.1,
+OpenCode v2.0.27; see `docs/harnesses/`), not "current releases." Against Telltale `2e8c56a` it gives
 `not_evaluable`: Codex rollouts fail on `token_usage_record` (finding F1) and
 OpenCode v2 databases yield zero records (F9). Use it to check whether a
 Telltale build can read what harnesses write today.

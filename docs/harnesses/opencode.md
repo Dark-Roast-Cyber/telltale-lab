@@ -166,8 +166,8 @@ Create the schema from the DDL above with synthetic rows (`ses_…`, `msg_…`,
   and the [OpenCode adapter spec](https://github.com/Dark-Roast-Cyber/telltale/blob/2e8c56aa45583525e4536640adb2c977ba45d46b/openspec/specs/opencode-sqlite-canonical-observation-v2-adapter/spec.md).
 - **Live observation** (Telltale `0.7.0-rc.2`/`07a380d`): a synthetic v2-shape
   DB with one user message and one assistant message with a completed tool was
-  discovered and reported `parse_ok 1, records 0, failures []`, with only the
-  `selected_sources_produced_no_records` diagnostic warning (no scanner error).
+  discovered and reported `source_processing.parse_success_source_count` 1, records 0, failures [], with the
+  `selected_sources_produced_no_records` and `source_coverage_partial` diagnostic warnings (no scanner error).
 - Not reached: `OPENCODE_DB` overrides, `opencode-<channel>.db`, and on macOS
   the CLI's XDG path.
 

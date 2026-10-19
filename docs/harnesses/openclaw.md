@@ -155,8 +155,7 @@ synthetic `event_json`.
   - A zstd-compressed `sess-1.jsonl.deleted.<ts>.zst` is discovered and fails
     with `source_read`.
   - A Telltale-shape fixture parses.
-- So on ≥ v2026.8.1 Telltale reaches only leftover legacy files and archives,
-  and it rejects the documented legacy shape anyway.
+- The SQLite gap below is unread code evidence, not an observed install result. Synthetic JSONL fixtures were rejected; no real store was read. Do not treat that as proof that an installed ≥ v2026.8.1 host leaves only leftover legacy files.
 
 ## 13. Validation status and maintenance
 
