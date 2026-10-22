@@ -16,8 +16,8 @@ from .util import LabError, sha256_file
 
 # The revision this lab was last validated against. Newer revisions may work;
 # `doctor` reports a difference rather than refusing.
-TESTED_VERSION = "0.7.0-rc.2"
-TESTED_REVISION = "2e8c56aa4558"
+TESTED_VERSION = "0.7.0-rc.3"
+TESTED_REVISION = "fd4899aadcf2"
 VERSION_PATTERN = re.compile(r"^telltale (\S+) \(([0-9a-f]+)\)")
 
 

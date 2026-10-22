@@ -4,14 +4,14 @@ Creates `opencode/opencode.db` with the v1-line project/session/message/part
 tables (message and part payloads live in a JSON `data` column; ids and
 foreign keys are columns). This is the schema Telltale's `opencode.sqlite`
 adapter reads. OpenCode v2.0.0+ bootstraps fresh databases with
-`session_v2`/`session_message` instead, which Telltale currently acquires as
-zero records; see docs/harnesses/compatibility-findings.md. See docs/harnesses/opencode.md for the pinned
+`session_v2`/`session_message` instead. See docs/harnesses/opencode.md for the pinned
 upstream schema this follows and what is intentionally omitted.
 
 The `upstream` profile writes the v2.0.27 shape instead: `session_v2` and
 `session_message` rows, with tool calls as `content[]` entries of assistant
-messages. Telltale 2e8c56a acquires it as zero records (finding F9). Only the
-columns and tables needed for session history are created.
+messages. JSON-mode columns (`session_v2.model`, `session_message.data`) hold
+serialized JSON, as upstream stores them. Only the columns and tables needed
+for session history are created.
 
 SQLite files are not byte-reproducible across SQLite builds, so determinism
 is defined over `logical_dump()`, not the file hash.
@@ -27,7 +27,7 @@ from ..scenario import Scenario
 from ..util import epoch_ms, offset, parse_utc, stable_id
 
 SOURCE_ID = "opencode.sqlite"
-GENERATOR_VERSIONS = {"compatible": "opencode-sqlite-v1-schema/1", "upstream": "opencode-sqlite-v2.0.27/1"}
+GENERATOR_VERSIONS = {"compatible": "opencode-sqlite-v1-schema/1", "upstream": "opencode-sqlite-v2.0.27/2"}
 UPSTREAM_VERSION = "2.0.27"
 DENIED_ERROR = (
     "The user rejected permission to use this specific tool call. "
@@ -123,7 +123,9 @@ def _tool_inputs(item: dict) -> tuple[str, dict]:
 
 def _tool_content(item: dict, call_id: str, start_ms: int, end_ms: int) -> dict:
     """A v2 assistant `content[]` tool entry. v2 has no `pending` state, so a
-    call with no recorded outcome is left `running`."""
+    call with no recorded outcome is left `running`. An `error` state carries a
+    structured `{type, message}` error: upstream reports a denied call as
+    `permission.rejected` and a failed one as `tool.execution`."""
     name, inputs = _tool_inputs(item)
     result = item["result"]
     if result is None:
@@ -135,8 +137,10 @@ def _tool_content(item: dict, call_id: str, start_ms: int, end_ms: int) -> dict:
                  "content": [{"type": "text", "text": result.get("output", "")}]}
         return {"type": "tool", "id": call_id, "name": name, "executed": True, "state": state,
                 "time": {"created": start_ms, "ran": start_ms, "completed": end_ms}}
-    error = result.get("output") or (DENIED_ERROR if result["status"] == "denied" else "error")
-    return {"type": "tool", "id": call_id, "name": name, "executed": result["status"] != "denied",
+    denied = result["status"] == "denied"
+    error = {"type": "permission.rejected" if denied else "tool.execution",
+             "message": result.get("output") or (DENIED_ERROR if denied else "error")}
+    return {"type": "tool", "id": call_id, "name": name, "executed": not denied,
             "state": {"status": "error", "input": inputs, "error": error},
             "time": {"created": start_ms, "completed": end_ms}}
 
@@ -146,8 +150,8 @@ def _write_upstream(scenario: Scenario, root: Path, target: Path) -> list[Path]:
     start = parse_utc(session_cfg["start"])
     step = float(session_cfg.get("step_seconds", 2))
     cwd = session_cfg["cwd"]
-    model = session_cfg.get("model", "synthetic-model")
-    provider = session_cfg.get("provider", "synthetic-provider")
+    model = {"id": session_cfg.get("model", "synthetic-model"),
+             "providerID": session_cfg.get("provider", "synthetic-provider")}
 
     def ident(prefix: str, *parts: str, ordinal: int = 0) -> str:
         return f"{prefix}_{ordinal:06d}{stable_id(scenario.id, 'v2', prefix, *parts, length=20)}"
@@ -180,7 +184,7 @@ def _write_upstream(scenario: Scenario, root: Path, target: Path) -> list[Path]:
         if assistant is None:
             assistant = {"id": ident("msg", "assistant", str(index), ordinal=index + 1), "updated": now,
                          "data": {"time": {"created": now}, "agent": "build",
-                                  "model": {"id": model, "providerID": provider}, "content": []}}
+                                  "model": model, "content": []}}
         if item["type"] == "assistant":
             assistant["data"]["content"].append({"type": "text", "text": item["text"]})
             assistant["updated"] = max(assistant["updated"], now)
@@ -202,7 +206,7 @@ def _write_upstream(scenario: Scenario, root: Path, target: Path) -> list[Path]:
             "INSERT INTO session_v2 (id, project_id, slug, directory, title, version, agent, model, "
             "time_created, time_updated) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (session_id, project_id, stable_id(scenario.id, "slug", length=8), cwd, scenario.data["title"],
-             UPSTREAM_VERSION, "build", model, t0, last),
+             UPSTREAM_VERSION, "build", _dump(model), t0, last),
         )
         conn.executemany("INSERT INTO session_message VALUES (?,?,?,?,?,?,?)", rows)
         conn.commit()
