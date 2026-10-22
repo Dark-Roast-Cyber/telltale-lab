@@ -9,7 +9,7 @@ not emitted; see that guide before adding them).
 The `upstream` profile follows what Codex rust-v0.162.1 persists instead: the
 `exec_command` shell tool with a `cmd` string, `task_started`/`task_complete`
 turn events, and a `token_usage_record` after each model response. Telltale
-2e8c56a rejects the whole rollout on that record (compatibility finding F1).
+2e8c56a rejected the whole rollout on that record (compatibility finding F1).
 It is not a full reproduction of a live rollout.
 """
 
